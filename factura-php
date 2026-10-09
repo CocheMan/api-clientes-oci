@@ -1,0 +1,90 @@
+<?php
+header("Content-Type: application/json; charset=UTF-8");
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
+
+require_once 'db.php';
+
+$method = $_SERVER['REQUEST_METHOD'];
+$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+$uriSegments = explode('/', trim($uri, '/'));
+
+$id = null;
+if (isset($uriSegments[3]) && is_numeric($uriSegments[3])) {
+    $id = (int)$uriSegments[3];
+}
+
+switch ($method) {
+    case 'GET':
+        if ($id) {
+            $stmt = $pdo->prepare("SELECT * FROM factura WHERE id_factura = ?");
+            $stmt->execute([$id]);
+            $item = $stmt->fetch();
+            if ($item) {
+                http_response_code(200);
+                echo json_encode(["status" => "success", "data" => $item]);
+            } else {
+                http_response_code(404);
+                echo json_encode(["status" => "error", "message" => "Factura no encontrada"]);
+            }
+        } else {
+            $stmt = $pdo->query("SELECT * FROM factura ORDER BY id_factura ASC");
+            $items = $stmt->fetchAll();
+            http_response_code(200);
+            echo json_encode(["status" => "success", "total" => count($items), "data" => $items]);
+        }
+        break;
+
+    case 'POST':
+        $data = json_decode(file_get_contents("php://input"), true);
+        if (!isset($data['id_orden'], $data['folio_fiscal'], $data['subtotal'], $data['impuesto'], $data['total'], $data['metodo_pago'])) {
+            http_response_code(400);
+            echo json_encode(["status" => "error", "message" => "Datos de factura incompletos"]);
+            exit();
+        }
+        $stmt = $pdo->prepare("INSERT INTO factura (id_orden, folio_fiscal, subtotal, impuesto, total, metodo_pago) VALUES (?, ?, ?, ?, ?, ?)");
+        if ($stmt->execute([$data['id_orden'], $data['folio_fiscal'], $data['subtotal'], $data['impuesto'], $data['total'], $data['metodo_pago']])) {
+            http_response_code(201);
+            echo json_encode(["status" => "success", "message" => "Factura generada exitosamente", "id" => (int)$pdo->lastInsertId()]);
+        } else {
+            http_response_code(500);
+            echo json_encode(["status" => "error", "message" => "Error al registrar factura"]);
+        }
+        break;
+
+    case 'PUT':
+        if (!$id) {
+            http_response_code(400);
+            echo json_encode(["status" => "error", "message" => "ID no especificado"]);
+            exit();
+        }
+        $data = json_decode(file_get_contents("php://input"), true);
+        $stmt = $pdo->prepare("UPDATE factura SET id_orden = ?, folio_fiscal = ?, subtotal = ?, impuesto = ?, total = ?, metodo_pago = ? WHERE id_factura = ?");
+        $stmt->execute([$data['id_orden'], $data['folio_fiscal'], $data['subtotal'], $data['impuesto'], $data['total'], $data['metodo_pago'], $id]);
+        http_response_code(200);
+        echo json_encode(["status" => "success", "message" => "Factura actualizada"]);
+        break;
+
+    case 'DELETE':
+        if (!$id) {
+            http_response_code(400);
+            echo json_encode(["status" => "error", "message" => "ID no especificado"]);
+            exit();
+        }
+        $stmt = $pdo->prepare("DELETE FROM factura WHERE id_factura = ?");
+        $stmt->execute([$id]);
+        http_response_code(200);
+        echo json_encode(["status" => "success", "message" => "Factura eliminada"]);
+        break;
+
+    default:
+        http_response_code(405);
+        echo json_encode(["status" => "error", "message" => "Método no permitido"]);
+        break;
+}
