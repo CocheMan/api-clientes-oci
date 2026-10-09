@@ -1,0 +1,93 @@
+<?php
+header("Content-Type: application/json; charset=UTF-8");
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
+
+require_once 'db.php';
+
+$method = $_SERVER['REQUEST_METHOD'];
+$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+$uriSegments = explode('/', trim($uri, '/'));
+
+$id = null;
+if (isset($uriSegments[3]) && is_numeric($uriSegments[3])) {
+    $id = (int)$uriSegments[3];
+}
+
+switch ($method) {
+    case 'GET':
+        if ($id) {
+            $stmt = $pdo->prepare("SELECT * FROM refaccion WHERE id_refaccion = ?");
+            $stmt->execute([$id]);
+            $item = $stmt->fetch();
+            if ($item) {
+                http_response_code(200);
+                echo json_encode(["status" => "success", "data" => $item]);
+            } else {
+                http_response_code(404);
+                echo json_encode(["status" => "error", "message" => "Refacción no encontrada"]);
+            }
+        } else {
+            $stmt = $pdo->query("SELECT * FROM refaccion ORDER BY id_refaccion ASC");
+            $items = $stmt->fetchAll();
+            http_response_code(200);
+            echo json_encode(["status" => "success", "total" => count($items), "data" => $items]);
+        }
+        break;
+
+    case 'POST':
+        $data = json_decode(file_get_contents("php://input"), true);
+        if (!isset($data['codigo_parte'], $data['nombre'], $data['categoria'], $data['precio_unitario'])) {
+            http_response_code(400);
+            echo json_encode(["status" => "error", "message" => "Datos incompletos"]);
+            exit();
+        }
+        $stock_actual = $data['stock_actual'] ?? 0;
+        $stock_minimo = $data['stock_minimo'] ?? 1;
+
+        $stmt = $pdo->prepare("INSERT INTO refaccion (codigo_parte, nombre, categoria, precio_unitario, stock_actual, stock_minimo) VALUES (?, ?, ?, ?, ?, ?)");
+        if ($stmt->execute([$data['codigo_parte'], $data['nombre'], $data['categoria'], $data['precio_unitario'], $stock_actual, $stock_minimo])) {
+            http_response_code(201);
+            echo json_encode(["status" => "success", "message" => "Refacción agregada", "id" => (int)$pdo->lastInsertId()]);
+        } else {
+            http_response_code(500);
+            echo json_encode(["status" => "error", "message" => "Error al guardar refacción"]);
+        }
+        break;
+
+    case 'PUT':
+        if (!$id) {
+            http_response_code(400);
+            echo json_encode(["status" => "error", "message" => "ID no especificado"]);
+            exit();
+        }
+        $data = json_decode(file_get_contents("php://input"), true);
+        $stmt = $pdo->prepare("UPDATE refaccion SET codigo_parte = ?, nombre = ?, categoria = ?, precio_unitario, stock_actual, stock_minimo WHERE id_refaccion = ?");
+        $stmt->execute([$data['codigo_parte'], $data['nombre'], $data['categoria'], $data['precio_unitario'], $data['stock_actual'], $data['stock_minimo'], $id]);
+        http_response_code(200);
+        echo json_encode(["status" => "success", "message" => "Refacción actualizada"]);
+        break;
+
+    case 'DELETE':
+        if (!$id) {
+            http_response_code(400);
+            echo json_encode(["status" => "error", "message" => "ID no especificado"]);
+            exit();
+        }
+        $stmt = $pdo->prepare("DELETE FROM refaccion WHERE id_refaccion = ?");
+        $stmt->execute([$id]);
+        http_response_code(200);
+        echo json_encode(["status" => "success", "message" => "Refacción eliminada"]);
+        break;
+
+    default:
+        http_response_code(405);
+        echo json_encode(["status" => "error", "message" => "Método no permitido"]);
+        break;
+}
