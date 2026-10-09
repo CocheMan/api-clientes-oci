@@ -1,5 +1,12 @@
 RewriteEngine On
 RewriteBase /
+
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
+
+# Rutas de la API v1 a sus respectivos archivos PHP
 RewriteRule ^api/v1/clientes(.*)$ api.php [QSA,L]
+RewriteRule ^api/v1/equipo(.*)$ equipo.php [QSA,L]
+RewriteRule ^api/v1/orden_servicio(.*)$ orden_servicio.php [QSA,L]
+RewriteRule ^api/v1/refaccion(.*)$ refaccion.php [QSA,L]
+RewriteRule ^api/v1/factura(.*)$ factura.php [QSA,L]
